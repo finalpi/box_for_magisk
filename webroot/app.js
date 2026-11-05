@@ -173,6 +173,11 @@
       $('#pidValue').textContent = state.status.pid || '—';
       $('#uptimeValue').textContent = state.status.uptime || '—';
       $('#configPathValue').textContent = state.status.config_path || '—';
+      const currentKernel = (state.status.version || '').match(/v[0-9]+\.[0-9]+\.[0-9]+/);
+      if (currentKernel) {
+        state.kernel.current = currentKernel[0];
+        renderKernelInfo();
+      }
       $('[data-action="start"]').disabled = running || state.busy;
       $('[data-action="stop"]').disabled = !running || state.busy;
     } catch (error) {
@@ -302,7 +307,7 @@
     $('#refreshLatencyButton').disabled = true;
     $('#latencyUpdated').textContent = '正在通过 HTTPS 检测…';
     try {
-      const result = await exec(command('latency'));
+      const result = await spawn('latency');
       const latency = parsePairs(result.stdout);
       renderLatency($('#baiduLatency'), latency.baidu);
       renderLatency($('#googleLatency'), latency.google);
@@ -316,23 +321,49 @@
     }
   }
 
+  function renderKernelInfo() {
+    const currentVersion = state.kernel.current || 'not-installed';
+    const latestVersion = state.kernel.latest || '';
+    $('#currentKernelVersion').textContent = currentVersion === 'not-installed' ? '未安装' : currentVersion;
+    $('#latestKernelVersion').textContent = latestVersion === 'unavailable' ? '查询失败' : latestVersion || '正在查询';
+    if (!latestVersion) {
+      $('#kernelState').textContent = '本地已读取';
+      $('#kernelState').className = 'kernel-state current';
+      $('#updateKernelButton').textContent = '正在查询最新稳定版';
+      $('#updateKernelButton').disabled = true;
+      return;
+    }
+    const available = currentVersion !== 'not-installed' && latestVersion !== 'unavailable' && currentVersion !== latestVersion;
+    const current = currentVersion !== 'not-installed' && currentVersion === latestVersion;
+    $('#kernelState').textContent = available ? '发现更新' : current ? '已是最新' : '暂时无法比较';
+    $('#kernelState').className = `kernel-state ${available ? 'available' : current ? 'current' : ''}`;
+    $('#updateKernelButton').textContent = available ? `更新到 ${latestVersion}` : current ? '重新安装最新稳定版' : '重新检查版本';
+    $('#updateKernelButton').disabled = state.busy || latestVersion === 'unavailable';
+  }
+
+  function restoreCachedKernelInfo() {
+    try {
+      const cached = JSON.parse(localStorage.getItem('box.kernel.latest') || 'null');
+      if (cached && /^v[0-9]+\.[0-9]+\.[0-9]+$/.test(cached.version) && Date.now() - cached.time < 86400000) {
+        state.kernel.latest = cached.version;
+      }
+    } catch (_) { /* Ignore invalid or unavailable WebView storage. */ }
+    renderKernelInfo();
+  }
+
   async function loadKernelInfo() {
     $('#kernelState').textContent = '正在检查';
     $('#kernelState').className = 'kernel-state';
     try {
-      const result = await exec(command('kernel-info'));
-      state.kernel = parsePairs(result.stdout);
-      $('#currentKernelVersion').textContent = state.kernel.current === 'not-installed' ? '未安装' : state.kernel.current;
-      $('#latestKernelVersion').textContent = state.kernel.latest === 'unavailable' ? '查询失败' : state.kernel.latest;
-      const available = state.kernel.update_available === 'true';
-      const current = state.kernel.update_available === 'false';
-      $('#kernelState').textContent = available ? '发现更新' : current ? '已是最新' : '暂时无法比较';
-      $('#kernelState').className = `kernel-state ${available ? 'available' : current ? 'current' : ''}`;
-      $('#updateKernelButton').textContent = available ? `更新到 ${state.kernel.latest}` : current ? '重新安装最新稳定版' : '重新检查版本';
-      $('#updateKernelButton').disabled = state.busy || state.kernel.latest === 'unavailable';
+      const result = await spawn('kernel-info');
+      state.kernel = { ...state.kernel, ...parsePairs(result.stdout) };
+      if (state.kernel.latest && state.kernel.latest !== 'unavailable') {
+        try { localStorage.setItem('box.kernel.latest', JSON.stringify({ version: state.kernel.latest, time: Date.now() })); } catch (_) { /* Storage can be disabled. */ }
+      }
+      renderKernelInfo();
     } catch (error) {
       $('#kernelState').textContent = '检查失败';
-      $('#latestKernelVersion').textContent = '—';
+      if (!state.kernel.latest) $('#latestKernelVersion').textContent = '—';
       $('#updateKernelButton').textContent = '重新检查版本';
     }
   }
@@ -481,7 +512,12 @@
   $('#reloadSubscriptionsButton').addEventListener('click', loadSettings);
   $('#updateKernelButton').addEventListener('click', updateKernel);
   window.addEventListener('resize', drawSpeedChart);
-  Promise.all([loadStatus(), loadSettings(), loadKernelInfo(), loadTraffic(), loadLatency()]);
+  restoreCachedKernelInfo();
+  Promise.all([loadStatus(), loadSettings(), loadTraffic()]);
+  requestAnimationFrame(() => {
+    setTimeout(loadKernelInfo, 120);
+    setTimeout(loadLatency, 350);
+  });
   setInterval(loadTraffic, 2000);
   setInterval(loadLatency, 30000);
 }());

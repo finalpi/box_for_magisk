@@ -1,3 +1,9 @@
+#### Changelog v1.11.3 - 05-11-26
+- Render local service status and current kernel version before network requests
+- Run latest-version and latency checks through the asynchronous KernelSU process bridge
+- Cache the latest stable Mihomo version for instant display on later visits
+- Delay background network checks until after the first WebUI frame
+
 #### Changelog v1.11.2 - 05-11-26
 - Fix latest Mihomo version lookup on Android without storing the large GitHub response in an argument
 - Show the exact settings.ini subscription source and add a manual reload action
