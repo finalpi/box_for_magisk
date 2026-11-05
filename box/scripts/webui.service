@@ -277,12 +277,48 @@ read_saved_ssids() {
   emit saved_ssids "${saved}"
 }
 
+update_clash_subscription() {
+  echo "[1/4] Reading Clash/Mihomo subscription settings..."
+  load_settings
+  [ "${bin_name}" = "clash" ] || fail "Select Clash/Mihomo before updating its subscription"
+  [ "${#subscription_url_clash[@]}" -eq 1 ] || fail "Full configuration update requires exactly one Clash/Mihomo subscription URL"
+  url="${subscription_url_clash[0]}"
+  case "${url}" in https://*|http://*) ;; *) fail "Invalid subscription URL" ;; esac
+  curl_bin="$(command -v curl 2>/dev/null)"
+  [ -x "${curl_bin}" ] || curl_bin="${control_box_dir}/bin/curl"
+  [ -x "${curl_bin}" ] || fail "curl is required to download subscriptions"
+  [ -x "${bin_path}" ] || fail "Clash/Mihomo binary is missing"
+  lock="${control_run_dir}/subscription-update.lock"
+  mkdir "${lock}" 2>/dev/null || fail "Another subscription update is already running"
+  candidate="${clash_config}.webui-download.$$"
+  trap 'rm -f "${candidate}"; rmdir "${lock}" 2>/dev/null' EXIT
+  echo "[2/4] Downloading configuration (maximum 45 seconds)..."
+  "${curl_bin}" --fail --silent --show-error --location --connect-timeout 8 --max-time 45 --user-agent box_for_root --output "${candidate}" "${url}" 2>/dev/null || fail "Subscription download failed (HTTP, TLS or network timeout); existing configuration retained"
+  [ -s "${candidate}" ] || fail "Downloaded configuration is empty"
+  echo "[3/4] Validating downloaded configuration..."
+  "${bin_path}" -t -d "${control_box_dir}/clash" -f "${candidate}" > "${lock}/validation.log" 2>&1 || {
+    rm -f "${lock}/validation.log"
+    fail "Mihomo rejected the downloaded configuration; existing configuration retained"
+  }
+  rm -f "${lock}/validation.log"
+  cp -p "${clash_config}" "${clash_config}.webui-backup" || fail "Unable to back up existing configuration"
+  mv "${candidate}" "${clash_config}" || fail "Unable to install downloaded configuration"
+  echo "[4/4] Restarting Clash/Mihomo..."
+  if ! "${control_scripts_dir}/box.service" restart || ! busybox pidof clash >/dev/null; then
+    echo "Restart failed; restoring the previous configuration..."
+    cp -p "${clash_config}.webui-backup" "${clash_config}"
+    "${control_scripts_dir}/box.service" restart
+    fail "Failed to start with new subscription; previous configuration restored"
+  fi
+  echo "Subscription configuration downloaded and service restarted successfully."
+}
+
 run_service_action() {
   case "$1" in
     start) "${control_scripts_dir}/box.service" start && "${control_scripts_dir}/box.iptables" enable ;;
     stop) "${control_scripts_dir}/box.iptables" disable; "${control_scripts_dir}/box.service" stop ;;
     restart) "${control_scripts_dir}/box.service" restart ;;
-    subscription) "${control_scripts_dir}/box.tool" subs ;;
+    subscription) update_clash_subscription ;;
     update-kernel) "${control_scripts_dir}/box.tool" upmihomo ;;
     *) fail "unsupported action" ;;
   esac

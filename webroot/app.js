@@ -47,7 +47,7 @@
     return `${CONTROL} ${safeAction}${safeArgs.length ? ` ${safeArgs.join(' ')}` : ''}`;
   }
 
-  function exec(commandText) {
+  function legacyExec(commandText) {
     return new Promise((resolve, reject) => {
       if (!window.ksu || typeof window.ksu.exec !== 'function') {
         if (previewMode) resolve({ code: 0, stdout: demoResponse(commandText), stderr: '', demo: true });
@@ -70,8 +70,16 @@
     });
   }
 
-  function spawn(action, onData) {
-    if (!window.ksu || typeof window.ksu.spawn !== 'function') return exec(command(action));
+  function exec(commandText) {
+    const parts = commandText.slice(CONTROL.length).trim().split(' ');
+    return spawn(parts.shift(), undefined, parts);
+  }
+
+  async function spawn(action, onData, args = []) {
+    // Let pending dialogs, loading labels and disabled states reach the screen
+    // before entering the native bridge, including older synchronous fallbacks.
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    if (!window.ksu || typeof window.ksu.spawn !== 'function') return legacyExec(command(action, args));
     return new Promise((resolve, reject) => {
       const callbackName = `__boxControlProcess${Date.now()}${Math.floor(Math.random() * 1000)}`;
       let stdout = '';
@@ -95,7 +103,7 @@
         }
       };
       try {
-        window.ksu.spawn(CONTROL, JSON.stringify([action]), null, callbackName);
+        window.ksu.spawn(CONTROL, JSON.stringify([action, ...args.map((arg) => arg || "''")]), null, callbackName);
       } catch (error) {
         delete window[callbackName];
         reject(error);
@@ -433,10 +441,12 @@
   }
 
   async function updateKernel() {
+    if (state.busy) return;
     if (state.kernel.latest === 'unavailable') return loadKernelInfo();
     const target = state.kernel.latest || '最新稳定版';
     if (!window.confirm(`将下载并安装 Mihomo ${target}。运行中的 Clash 服务会自动重启，是否继续？`)) return;
     setBusy(true);
+    setButtonLoading($('#updateKernelButton'), true, '更新中');
     showOperation(`正在更新 Mihomo ${target}`, '正在连接 GitHub Release…');
     try {
       const result = await spawn('update-kernel', (stdout, stderr) => {
@@ -447,7 +457,7 @@
       await Promise.all([loadKernelInfo(), loadStatus()]);
     } catch (error) {
       $('#operationOutput').textContent = `更新失败\n\n${error.message}`;
-    } finally { setBusy(false); }
+    } finally { setButtonLoading($('#updateKernelButton'), false); setBusy(false); renderKernelInfo(); }
   }
 
   function collectSettings() {
@@ -469,6 +479,7 @@
   }
 
   async function saveSubscriptionsOnly() {
+    if (state.busy) return;
     const button = $('#saveSubscriptionsButton');
     let data;
     try { data = collectSettings(); } catch (error) { toast(error.message); return; }
@@ -487,6 +498,7 @@
   }
 
   async function saveSettings(restart) {
+    if (state.busy) return;
     const button = restart ? $('#saveRestartButton') : $('#saveSettingsButton');
     let data;
     try { data = collectSettings(); } catch (error) { toast(error.message); return; }
@@ -498,7 +510,9 @@
       await writeLists(data.urls, data.ssids);
       let output = '设置已保存。';
       if (restart) {
-        const result = await exec(command('restart'));
+        const result = await spawn('restart', (stdout, stderr) => {
+          $('#operationOutput').textContent = `设置已保存，正在应用…\n${stdout}\n${stderr}`;
+        });
         output += `\n\n${result.stdout || '服务已重启。'}`;
       }
       $('#operationOutput').textContent = output;
@@ -510,12 +524,16 @@
   }
 
   async function runAction(action, button) {
+    if (state.busy) return;
     const titles = { start: '正在开启服务', stop: '正在关闭服务', restart: '正在重启服务', subscription: '正在更新订阅' };
     setBusy(true);
     setButtonLoading(button, true, '执行中');
     showOperation(titles[action] || '正在执行');
     try {
-      const result = await exec(command(action));
+      const result = await spawn(action, (stdout, stderr) => {
+        $('#operationOutput').textContent = [stdout, stderr].filter(Boolean).join('\n');
+        $('#operationOutput').scrollTop = $('#operationOutput').scrollHeight;
+      });
       $('#operationOutput').textContent = result.stdout || '操作已完成。';
       toast('操作已完成');
       await Promise.all([loadStatus(), loadSettings()]);

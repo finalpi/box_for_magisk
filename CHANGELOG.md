@@ -1,3 +1,10 @@
+#### Changelog v1.11.7 - 05-11-26
+- Execute WebUI commands asynchronously after painting button and dialog feedback
+- Stream live service and subscription logs into the operation dialog
+- Make manual Clash subscription updates download a single full configuration with HTTP errors and timeouts handled
+- Validate downloaded Mihomo configuration before installation and restore the previous configuration if restart fails
+- Add regression coverage for asynchronous bridge events and subscription failure paths
+
 #### Changelog v1.11.6 - 05-11-26
 - Add visible tap animation and loading feedback to WebUI buttons
 - List Android saved Wi-Fi networks for one-tap SSID rule selection

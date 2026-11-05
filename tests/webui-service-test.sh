@@ -11,6 +11,7 @@ sed -i 's/\r$//' "${test_dir}/settings.ini"
 sed -i "s#/data/adb/box#${test_dir}#g" "${test_dir}/settings.ini"
 
 busybox() {
+  if [ "${TEST_SUBS_MODE:-0}" = 1 ] && [ "$1" = pidof ]; then echo 123; return; fi
   command "$@"
 }
 export -f busybox
@@ -56,4 +57,25 @@ wifi_output=$'Network Id SSID Security type\n0            Home WiFi             
 saved_wifi_output="$(SAVED_WIFI_OUTPUT="${wifi_output}" bash "${control}" saved-ssids | grep '^saved_ssids=' | cut -d= -f2- | base64 -d)"
 [[ "${saved_wifi_output}" == $'Home WiFi\nCafe Guest' ]]
 
-echo "webui.service tests passed"
+mkdir -p "${test_dir}/bin" "${test_dir}/clash"
+for name in curl clash; do
+  cp "${repo_dir}/tests/subscription-command-fixture.sh" "${test_dir}/bin/${name}"
+done
+cp "${repo_dir}/tests/subscription-command-fixture.sh" "${test_dir}/scripts/box.service"
+chmod +x "${test_dir}/bin/"* "${test_dir}/scripts/box.service"
+export PATH="${test_dir}/bin:${PATH}"
+export TEST_SUBS_MODE=1
+bash "${control}" set-subscriptions "$(printf '%s' "${first_url}" | base64 -w0)" >/dev/null
+# Manual updates work with one URL, two legacy provider filenames and cron updates disabled.
+printf 'mode: direct\n' > "${test_dir}/clash/config.yaml"
+bash "${control}" subscription >/dev/null
+grep -q 'downloaded fixture' "${test_dir}/clash/config.yaml"
+for failure in TEST_DOWNLOAD_FAIL TEST_CONFIG_FAIL TEST_RESTART_FAIL; do
+  printf 'mode: direct\n# original\n' > "${test_dir}/clash/config.yaml"
+  if env "${failure}=1" bash "${control}" subscription >/dev/null 2>&1; then
+    echo "${failure} incorrectly reported success" >&2; exit 1
+  fi
+  grep -q '# original' "${test_dir}/clash/config.yaml"
+  test ! -d "${test_dir}/run/subscription-update.lock"
+done
+echo "webui.service tests passed (including subscription success and rollback cases)"
