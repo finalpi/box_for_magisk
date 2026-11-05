@@ -1,3 +1,10 @@
+#### Changelog v1.11.1 - 05-11-26
+- Add live download and upload speed monitoring with a one-minute trend chart
+- Add HTTPS access latency checks for Baidu, Google and YouTube
+- Show the installed and latest stable Mihomo versions in the WebUI
+- Add one-tap Mihomo kernel update with live progress output
+- Use the official latest stable Mihomo release endpoint for kernel updates
+
 #### Changelog v1.11.0 - 05-11-26
 - Add a mobile-first module WebUI for service status and controls
 - Add quick settings for core, network mode, IPv6, subscription and cron options

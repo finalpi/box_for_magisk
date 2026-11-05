@@ -2,7 +2,11 @@
   'use strict';
 
   const CONTROL = '/data/adb/box/scripts/webui.service';
-  const state = { status: {}, settings: {}, config: '', busy: false, panelUrl: '' };
+  const state = {
+    status: {}, settings: {}, kernel: {}, config: '', busy: false, panelUrl: '',
+    traffic: { rx: 0, tx: 0, time: 0, loading: false, downHistory: [], upHistory: [] },
+    latencyLoading: false
+  };
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
@@ -64,10 +68,49 @@
     });
   }
 
+  function spawn(action, onData) {
+    if (!window.ksu || typeof window.ksu.spawn !== 'function') return exec(command(action));
+    return new Promise((resolve, reject) => {
+      const callbackName = `__boxControlProcess${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      let stdout = '';
+      let stderr = '';
+      const append = (type, data) => {
+        const line = `${data || ''}\n`;
+        if (type === 'stdout') stdout += line;
+        else stderr += line;
+        if (onData) onData(stdout, stderr);
+      };
+      window[callbackName] = {
+        stdout: { emit: (event, data) => { if (event === 'data') append('stdout', data); } },
+        stderr: { emit: (event, data) => { if (event === 'data') append('stderr', data); } },
+        emit: (event, data) => {
+          if (event !== 'exit') return;
+          delete window[callbackName];
+          const code = Number(data);
+          const result = { code, stdout: stdout.trim(), stderr: stderr.trim() };
+          if (code === 0) resolve(result);
+          else reject(Object.assign(new Error(result.stderr || result.stdout || `命令执行失败（${code}）`), result));
+        }
+      };
+      try {
+        window.ksu.spawn(CONTROL, JSON.stringify([action]), null, callbackName);
+      } catch (error) {
+        delete window[callbackName];
+        reject(error);
+      }
+    });
+  }
+
   function demoResponse(commandText) {
     const pairs = (data) => Object.entries(data).map(([key, value]) => `${key}=${encode(value)}`).join('\n');
     if (commandText.endsWith(' status')) return pairs({ running: 'true', pid: '1613', uptime: '03:12:42', core: 'clash', mode: 'tun', version: 'Mihomo v1.19.12', config_path: '/data/adb/box/clash/config.yaml', panel_url: 'http://127.0.0.1:9090/ui/' });
     if (commandText.endsWith(' settings')) return pairs({ bin_name: 'clash', network_mode: 'tun', ipv6: 'false', renew: 'false', update_subscription: 'true', run_crontab: 'false', custom_rules_subs: 'false', subscription_urls: 'https://example.com/subscription' });
+    if (commandText.endsWith(' traffic')) {
+      const tick = Math.floor(Date.now() / 1000);
+      return pairs({ interface: 'tun0', rx_bytes: String(812345678 + tick * 124000), tx_bytes: String(186543210 + tick * 39000) });
+    }
+    if (commandText.endsWith(' latency')) return pairs({ baidu: '163', google: '286', youtube: '412' });
+    if (commandText.endsWith(' kernel-info')) return pairs({ current: 'v1.19.12', latest: 'v1.19.33', update_available: 'true' });
     if (commandText.endsWith(' config')) return 'mixed-port: 7890\nallow-lan: true\nmode: rule\nlog-level: info\nexternal-controller: 0.0.0.0:9090\n\ndns:\n  enable: true\n  enhanced-mode: fake-ip\n';
     if (commandText.endsWith(' logs')) return '11:12 am [Info]: clash service is running.\n11:12 am [Info]: clash status: S (sleeping) (PID: 1613)\n11:12 am [Info]: local IP: 192.168.1.20';
     return '演示模式：操作已模拟完成。真机中会通过 KernelSU WebUI 执行。';
@@ -88,6 +131,8 @@
       const running = state.status.running === 'true';
       $('[data-action="start"]').disabled = running;
       $('[data-action="stop"]').disabled = !running;
+      $('#refreshLatencyButton').disabled = state.latencyLoading;
+      $('#updateKernelButton').disabled = !state.kernel.latest || state.kernel.latest === 'unavailable';
     }
   }
 
@@ -148,6 +193,161 @@
     } catch (error) {
       toast(`读取设置失败：${error.message}`);
     }
+  }
+
+  function formatSpeed(bytes) {
+    const value = Math.max(0, Number(bytes) || 0);
+    if (value < 1024) return `${value.toFixed(0)} B/s`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB/s`;
+    if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB/s`;
+    return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB/s`;
+  }
+
+  function drawSpeedChart() {
+    const canvas = $('#speedChart');
+    const context = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    const width = Math.max(280, canvas.clientWidth);
+    const height = 150;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    context.scale(ratio, ratio);
+    context.clearRect(0, 0, width, height);
+
+    const down = state.traffic.downHistory;
+    const up = state.traffic.upHistory;
+    const max = Math.max(1024, ...down, ...up) * 1.12;
+    const styles = getComputedStyle(document.documentElement);
+    const drawLine = (values, color, fill) => {
+      if (!values.length) return;
+      context.beginPath();
+      values.forEach((value, index) => {
+        const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+        const y = height - 10 - ((value / max) * (height - 24));
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.lineWidth = 2.5;
+      context.lineJoin = 'round';
+      context.lineCap = 'round';
+      context.strokeStyle = color;
+      context.stroke();
+      if (fill) {
+        context.lineTo(width, height);
+        context.lineTo(0, height);
+        context.closePath();
+        const gradient = context.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, `${color}38`);
+        gradient.addColorStop(1, `${color}00`);
+        context.fillStyle = gradient;
+        context.fill();
+      }
+    };
+    drawLine(down, styles.getPropertyValue('--primary').trim(), true);
+    drawLine(up, styles.getPropertyValue('--upload').trim(), false);
+  }
+
+  async function loadTraffic() {
+    if (state.traffic.loading || document.hidden) return;
+    state.traffic.loading = true;
+    try {
+      const result = await exec(command('traffic'));
+      const traffic = parsePairs(result.stdout);
+      const now = Date.now();
+      const rx = Number(traffic.rx_bytes);
+      const tx = Number(traffic.tx_bytes);
+      let down = 0;
+      let up = 0;
+      if (state.traffic.time && rx >= state.traffic.rx && tx >= state.traffic.tx) {
+        const seconds = Math.max(.25, (now - state.traffic.time) / 1000);
+        down = (rx - state.traffic.rx) / seconds;
+        up = (tx - state.traffic.tx) / seconds;
+      }
+      state.traffic.rx = rx;
+      state.traffic.tx = tx;
+      state.traffic.time = now;
+      state.traffic.downHistory.push(down);
+      state.traffic.upHistory.push(up);
+      state.traffic.downHistory = state.traffic.downHistory.slice(-30);
+      state.traffic.upHistory = state.traffic.upHistory.slice(-30);
+      $('#downloadSpeed').textContent = formatSpeed(down);
+      $('#uploadSpeed').textContent = formatSpeed(up);
+      $('#networkInterface').textContent = traffic.interface ? `接口 ${traffic.interface}` : '接口未知';
+      drawSpeedChart();
+    } catch (error) {
+      $('#networkInterface').textContent = '读取失败';
+    } finally { state.traffic.loading = false; }
+  }
+
+  function renderLatency(element, value) {
+    const numeric = Number(value);
+    element.className = '';
+    if (!Number.isFinite(numeric)) {
+      element.textContent = value === 'unavailable' ? '无 curl' : '超时';
+      element.classList.add('bad');
+      return;
+    }
+    element.textContent = `${numeric} ms`;
+    element.classList.add(numeric < 300 ? 'good' : numeric < 800 ? 'slow' : 'bad');
+  }
+
+  async function loadLatency() {
+    if (state.latencyLoading || document.hidden) return;
+    state.latencyLoading = true;
+    $('#refreshLatencyButton').disabled = true;
+    $('#latencyUpdated').textContent = '正在通过 HTTPS 检测…';
+    try {
+      const result = await exec(command('latency'));
+      const latency = parsePairs(result.stdout);
+      renderLatency($('#baiduLatency'), latency.baidu);
+      renderLatency($('#googleLatency'), latency.google);
+      renderLatency($('#youtubeLatency'), latency.youtube);
+      $('#latencyUpdated').textContent = `最近检测：${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · 每 30 秒刷新`;
+    } catch (error) {
+      $('#latencyUpdated').textContent = `检测失败：${error.message}`;
+    } finally {
+      state.latencyLoading = false;
+      if (!state.busy) $('#refreshLatencyButton').disabled = false;
+    }
+  }
+
+  async function loadKernelInfo() {
+    $('#kernelState').textContent = '正在检查';
+    $('#kernelState').className = 'kernel-state';
+    try {
+      const result = await exec(command('kernel-info'));
+      state.kernel = parsePairs(result.stdout);
+      $('#currentKernelVersion').textContent = state.kernel.current === 'not-installed' ? '未安装' : state.kernel.current;
+      $('#latestKernelVersion').textContent = state.kernel.latest === 'unavailable' ? '查询失败' : state.kernel.latest;
+      const available = state.kernel.update_available === 'true';
+      const current = state.kernel.update_available === 'false';
+      $('#kernelState').textContent = available ? '发现更新' : current ? '已是最新' : '暂时无法比较';
+      $('#kernelState').className = `kernel-state ${available ? 'available' : current ? 'current' : ''}`;
+      $('#updateKernelButton').textContent = available ? `更新到 ${state.kernel.latest}` : current ? '重新安装最新稳定版' : '重新检查版本';
+      $('#updateKernelButton').disabled = state.busy || state.kernel.latest === 'unavailable';
+    } catch (error) {
+      $('#kernelState').textContent = '检查失败';
+      $('#latestKernelVersion').textContent = '—';
+      $('#updateKernelButton').textContent = '重新检查版本';
+    }
+  }
+
+  async function updateKernel() {
+    if (state.kernel.latest === 'unavailable') return loadKernelInfo();
+    const target = state.kernel.latest || '最新稳定版';
+    if (!window.confirm(`将下载并安装 Mihomo ${target}。运行中的 Clash 服务会自动重启，是否继续？`)) return;
+    setBusy(true);
+    showOperation(`正在更新 Mihomo ${target}`, '正在连接 GitHub Release…');
+    try {
+      const result = await spawn('update-kernel', (stdout, stderr) => {
+        $('#operationOutput').textContent = [stdout, stderr].filter(Boolean).join('\n').trim() || '正在更新…';
+      });
+      $('#operationOutput').textContent = result.stdout || 'Mihomo 内核已更新。';
+      toast('Mihomo 内核更新完成');
+      await Promise.all([loadKernelInfo(), loadStatus()]);
+    } catch (error) {
+      $('#operationOutput').textContent = `更新失败\n\n${error.message}`;
+    } finally { setBusy(false); }
   }
 
   function collectSettings() {
@@ -239,12 +439,17 @@
   $$('[data-go]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.go)));
   $$('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.action)));
   $$('[data-close-sheet]').forEach((element) => element.addEventListener('click', closeOperation));
-  $('#refreshButton').addEventListener('click', () => Promise.all([loadStatus(), loadSettings()]));
+  $('#refreshButton').addEventListener('click', () => Promise.all([loadStatus(), loadSettings(), loadKernelInfo(), loadTraffic(), loadLatency()]));
   $('#settingsForm').addEventListener('submit', (event) => { event.preventDefault(); saveSettings(false); });
   $('#saveRestartButton').addEventListener('click', () => saveSettings(true));
   $('#reloadConfigButton').addEventListener('click', loadConfig);
   $('#copyConfigButton').addEventListener('click', copyConfig);
   $('#reloadLogsButton').addEventListener('click', loadLogs);
   $('#openPanelButton').addEventListener('click', openPanel);
-  Promise.all([loadStatus(), loadSettings()]);
+  $('#refreshLatencyButton').addEventListener('click', loadLatency);
+  $('#updateKernelButton').addEventListener('click', updateKernel);
+  window.addEventListener('resize', drawSpeedChart);
+  Promise.all([loadStatus(), loadSettings(), loadKernelInfo(), loadTraffic(), loadLatency()]);
+  setInterval(loadTraffic, 2000);
+  setInterval(loadLatency, 30000);
 }());

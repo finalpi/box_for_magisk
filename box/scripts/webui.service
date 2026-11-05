@@ -96,6 +96,85 @@ read_settings() {
   emit subscription_urls "${urls}"
 }
 
+read_traffic() {
+  iface="$(ip route get 1.1.1.1 2>/dev/null | busybox awk '{for (i = 1; i <= NF; i++) if ($i == "dev") {print $(i + 1); exit}}')"
+  if [ -z "${iface}" ] || [ ! -r "/sys/class/net/${iface}/statistics/rx_bytes" ]; then
+    iface="$(busybox awk '$2 == "00000000" {print $1; exit}' /proc/net/route 2>/dev/null)"
+  fi
+
+  if [ -n "${iface}" ] && [ -r "/sys/class/net/${iface}/statistics/rx_bytes" ]; then
+    rx_bytes="$(cat "/sys/class/net/${iface}/statistics/rx_bytes" 2>/dev/null)"
+    tx_bytes="$(cat "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null)"
+  else
+    iface="all"
+    rx_bytes="$(busybox awk -F'[: ]+' 'NR > 2 && $2 != "lo" {sum += $3} END {printf "%.0f", sum}' /proc/net/dev 2>/dev/null)"
+    tx_bytes="$(busybox awk -F'[: ]+' 'NR > 2 && $2 != "lo" {sum += $11} END {printf "%.0f", sum}' /proc/net/dev 2>/dev/null)"
+  fi
+
+  emit interface "${iface}"
+  emit rx_bytes "${rx_bytes:-0}"
+  emit tx_bytes "${tx_bytes:-0}"
+}
+
+probe_latency() {
+  name="$1"
+  url="$2"
+  output_file="$3"
+  curl_bin="$(command -v curl 2>/dev/null)"
+  [ -x "${curl_bin}" ] || curl_bin="${control_box_dir}/bin/curl"
+  if [ ! -x "${curl_bin}" ]; then
+    printf '%s' "unavailable" > "${output_file}"
+    return 0
+  fi
+
+  seconds="$(${curl_bin} -I -o /dev/null -sS -L --insecure --connect-timeout 4 --max-time 8 -w '%{time_starttransfer}' "${url}" 2>/dev/null)"
+  case "${seconds}" in
+    ''|*[!0-9.]*) printf '%s' "timeout" > "${output_file}" ;;
+    *) busybox awk -v seconds="${seconds}" 'BEGIN {printf "%d", (seconds * 1000) + 0.5}' > "${output_file}" ;;
+  esac
+}
+
+read_latency() {
+  latency_dir="${control_run_dir}/webui.latency.$$"
+  mkdir -p "${latency_dir}" || fail "failed to create latency workspace"
+  probe_latency baidu "https://www.baidu.com/" "${latency_dir}/baidu" &
+  probe_latency google "https://www.google.com/generate_204" "${latency_dir}/google" &
+  probe_latency youtube "https://www.youtube.com/" "${latency_dir}/youtube" &
+  wait
+  emit baidu "$(cat "${latency_dir}/baidu" 2>/dev/null || echo timeout)"
+  emit google "$(cat "${latency_dir}/google" 2>/dev/null || echo timeout)"
+  emit youtube "$(cat "${latency_dir}/youtube" 2>/dev/null || echo timeout)"
+  rm -rf "${latency_dir}"
+}
+
+read_kernel_info() {
+  mihomo_bin="${control_box_dir}/bin/xclash/mihomo"
+  current_version=""
+  if [ -x "${mihomo_bin}" ]; then
+    current_version="$(${mihomo_bin} -v 2>/dev/null | busybox grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+  fi
+
+  latest_version=""
+  if [ -n "${MIHOMO_RELEASE_JSON:-}" ]; then
+    release_json="${MIHOMO_RELEASE_JSON}"
+  elif command -v curl >/dev/null 2>&1; then
+    release_json="$(curl -fsSL --insecure --connect-timeout 6 --max-time 12 -H 'User-Agent: box_for_root' 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest' 2>/dev/null)"
+  elif [ -x "${control_box_dir}/bin/curl" ]; then
+    release_json="$(${control_box_dir}/bin/curl -fsSL --insecure --connect-timeout 6 --max-time 12 -H 'User-Agent: box_for_root' 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest' 2>/dev/null)"
+  else
+    release_json="$(busybox wget --no-check-certificate -qO- 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest' 2>/dev/null)"
+  fi
+  latest_version="$(printf '%s' "${release_json}" | busybox sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(v[0-9.]*\)".*/\1/p' | head -n 1)"
+
+  update_available="unknown"
+  if [ -n "${current_version}" ] && [ -n "${latest_version}" ]; then
+    [ "${current_version}" = "${latest_version}" ] && update_available="false" || update_available="true"
+  fi
+  emit current "${current_version:-not-installed}"
+  emit latest "${latest_version:-unavailable}"
+  emit update_available "${update_available}"
+}
+
 set_value() {
   key="$1"
   decoded="$(decode_value "$2")" || fail "invalid value encoding"
@@ -135,6 +214,7 @@ run_service_action() {
     stop) "${control_scripts_dir}/box.iptables" disable; "${control_scripts_dir}/box.service" stop ;;
     restart) "${control_scripts_dir}/box.service" restart ;;
     subscription) "${control_scripts_dir}/box.tool" subs ;;
+    update-kernel) "${control_scripts_dir}/box.tool" upmihomo ;;
     *) fail "unsupported action" ;;
   esac
 }
@@ -155,10 +235,13 @@ read_config() {
 case "$1" in
   status) read_status ;;
   settings) read_settings ;;
+  traffic) read_traffic ;;
+  latency) read_latency ;;
+  kernel-info) read_kernel_info ;;
   set) set_value "$2" "$3" ;;
   set-subscriptions) set_subscriptions "$2" ;;
-  start|stop|restart|subscription) run_service_action "$1" ;;
+  start|stop|restart|subscription|update-kernel) run_service_action "$1" ;;
   config) read_config ;;
   logs) [ -f "${box_log}" ] && tail -n 240 "${box_log}" || echo "No runtime log found." ;;
-  *) fail "Usage: $0 {status|settings|set|set-subscriptions|start|stop|restart|subscription|config|logs}" ;;
+  *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|set|set-subscriptions|start|stop|restart|subscription|update-kernel|config|logs}" ;;
 esac

@@ -40,4 +40,8 @@ if bash "${control}" set bin_name aW52YWxpZA== >/dev/null 2>&1; then
   exit 1
 fi
 
+kernel_output="$(MIHOMO_RELEASE_JSON='{"tag_name":"v9.9.9"}' bash "${control}" kernel-info)"
+latest_kernel="$(grep '^latest=' <<<"${kernel_output}" | cut -d= -f2- | base64 -d)"
+[[ "${latest_kernel}" == "v9.9.9" ]]
+
 echo "webui.service tests passed"

@@ -577,7 +577,7 @@ upkernel() {
 
         if [ "${mihomo_stable}" = "enable" ]; then
           log Info "Fetching latest stable version..."
-          latest_version=$($rev1 "https://api.github.com/repos/MetaCubeX/mihomo/releases" \
+          latest_version=$($rev1 "https://api.github.com/repos/MetaCubeX/mihomo/releases/latest" \
             | grep "tag_name" | busybox grep -oE "v[0-9.]*" | head -1)
           if [ -z "${latest_version}" ]; then
             log Error "Failed to retrieve latest stable version."
@@ -1205,6 +1205,14 @@ case "$1" in
   upkernel)
     upkernel
     ;;
+  upmihomo)
+    active_bin_name="${bin_name}"
+    bin_name="clash"
+    bin_path="${bin_dir}/clash"
+    xclash_option="mihomo"
+    [ "${active_bin_name}" = "clash" ] || box_pid="${box_run}/mihomo-update.pid"
+    upkernel
+    ;;
   upxui)
     upxui
     ;;
@@ -1238,7 +1246,8 @@ case "$1" in
     echo "  geosub      - Update both subscription and GeoX files, then reload if running"
     echo "  geox        - Update GeoX database, then reload if running"
     echo "  subs        - Update subscription (only for clash), then reload if running"
-    echo "  upkernel    - Update kernel-related components"
+    echo "  upkernel    - Update the selected kernel"
+    echo "  upmihomo    - Update the latest stable Mihomo kernel"
     echo "  upxui       - Update XUI panel"
     echo "  upyq        - Update yq binary"
     echo "  upcurl      - Update curl binary"

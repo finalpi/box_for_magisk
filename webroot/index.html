@@ -31,6 +31,18 @@
           </div>
         </article>
 
+        <section class="kernel-card" aria-labelledby="kernelTitle">
+          <div class="section-heading">
+            <div><p class="eyebrow">MIHOMO KERNEL</p><h2 id="kernelTitle">内核版本</h2></div>
+            <span class="kernel-state" id="kernelState">正在检查</span>
+          </div>
+          <div class="kernel-versions">
+            <div><span>当前版本</span><strong id="currentKernelVersion">—</strong></div>
+            <div><span>最新稳定版</span><strong id="latestKernelVersion">—</strong></div>
+          </div>
+          <button class="action-button kernel-update" id="updateKernelButton" type="button">检查完成后可更新</button>
+        </section>
+
         <section class="section-block" aria-labelledby="actionsTitle">
           <div class="section-heading"><div><p class="eyebrow">SERVICE</p><h2 id="actionsTitle">服务控制</h2></div></div>
           <div class="action-grid">
@@ -39,6 +51,32 @@
             <button class="action-button" type="button" data-action="restart">重启</button>
             <button class="action-button accent" type="button" data-action="subscription">更新订阅</button>
           </div>
+        </section>
+
+        <section class="monitor-card" aria-labelledby="speedTitle">
+          <div class="section-heading">
+            <div><p class="eyebrow">LIVE TRAFFIC</p><h2 id="speedTitle">实时网速</h2></div>
+            <span class="monitor-meta" id="networkInterface">正在检测接口</span>
+          </div>
+          <div class="speed-values">
+            <div><span>下载</span><strong id="downloadSpeed">—</strong></div>
+            <div><span>上传</span><strong id="uploadSpeed">—</strong></div>
+          </div>
+          <canvas id="speedChart" height="150" aria-label="最近一分钟上下行网速趋势"></canvas>
+          <p class="monitor-note">按当前出口接口统计，每 2 秒刷新。</p>
+        </section>
+
+        <section class="monitor-card" aria-labelledby="latencyTitle">
+          <div class="section-heading">
+            <div><p class="eyebrow">ACCESS LATENCY</p><h2 id="latencyTitle">访问延迟</h2></div>
+            <button class="text-button" id="refreshLatencyButton" type="button">重新检测</button>
+          </div>
+          <div class="latency-grid">
+            <div><span>Baidu</span><strong id="baiduLatency">—</strong></div>
+            <div><span>Google</span><strong id="googleLatency">—</strong></div>
+            <div><span>YouTube</span><strong id="youtubeLatency">—</strong></div>
+          </div>
+          <p class="monitor-note" id="latencyUpdated">通过 HTTPS 请求检测，每 30 秒刷新。</p>
         </section>
 
         <section class="section-block compact" aria-labelledby="summaryTitle">
