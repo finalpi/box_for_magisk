@@ -52,4 +52,8 @@ kernel_output="$(MIHOMO_RELEASE_JSON='{"tag_name":"v9.9.9"}' bash "${control}" k
 latest_kernel="$(grep '^latest=' <<<"${kernel_output}" | cut -d= -f2- | base64 -d)"
 [[ "${latest_kernel}" == "v9.9.9" ]]
 
+wifi_output=$'Network Id SSID Security type\n0            Home WiFi                        WPA2_PSK\n1            Cafe Guest                       WPA3_SAE\n2            Home WiFi                        WPA2_PSK'
+saved_wifi_output="$(SAVED_WIFI_OUTPUT="${wifi_output}" bash "${control}" saved-ssids | grep '^saved_ssids=' | cut -d= -f2- | base64 -d)"
+[[ "${saved_wifi_output}" == $'Home WiFi\nCafe Guest' ]]
+
 echo "webui.service tests passed"

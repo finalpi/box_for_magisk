@@ -230,8 +230,6 @@ set_subscriptions() {
   output="${output% })"
   [ "${output}" = "(" ] && output="()"
   replace_line "subscription_url_clash" "${output}" || fail "failed to update subscriptions"
-  actual_line="$(grep -m 1 '^subscription_url_clash=' "${settings_path}")"
-  [ "${actual_line}" = "subscription_url_clash=${output}" ] || fail "subscription write verification failed"
   emit subscription_urls "${saved_urls}"
 }
 
@@ -255,9 +253,28 @@ set_ssids() {
   output="${output% })"
   [ "${output}" = "(" ] && output="()"
   replace_line "wifi_ssids_list" "${output}" || fail "failed to update SSID list"
-  actual_line="$(grep -m 1 '^wifi_ssids_list=' "${settings_path}")"
-  [ "${actual_line}" = "wifi_ssids_list=${output}" ] || fail "SSID write verification failed"
   emit wifi_ssids "${saved_ssids}"
+}
+
+read_saved_ssids() {
+  if [ -n "${SAVED_WIFI_OUTPUT:-}" ]; then
+    networks="${SAVED_WIFI_OUTPUT}"
+  else
+    networks="$(cmd wifi list-networks 2>/dev/null)"
+  fi
+  [ -n "${networks}" ] || fail "unable to read saved Wi-Fi networks"
+  saved="$(printf '%s\n' "${networks}" | busybox awk '
+    NR == 1 || /^No networks$/ || /^[[:space:]]*$/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", line)
+      sub(/[[:space:]]+[^[:space:]]+[[:space:]]*$/, "", line)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      gsub(/^"|"$/, "", line)
+      if (line != "") print line
+    }
+  ' | busybox awk '!seen[$0]++')"
+  emit saved_ssids "${saved}"
 }
 
 run_service_action() {
@@ -293,8 +310,9 @@ case "$1" in
   set) set_value "$2" "$3" ;;
   set-subscriptions) set_subscriptions "$2" ;;
   set-ssids) set_ssids "$2" ;;
+  saved-ssids) read_saved_ssids ;;
   start|stop|restart|subscription|update-kernel) run_service_action "$1" ;;
   config) load_settings; read_config ;;
   logs) load_settings; [ -f "${box_log}" ] && tail -n 240 "${box_log}" || echo "No runtime log found." ;;
-  *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|set|set-subscriptions|set-ssids|start|stop|restart|subscription|update-kernel|config|logs}" ;;
+  *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|saved-ssids|set|set-subscriptions|set-ssids|start|stop|restart|subscription|update-kernel|config|logs}" ;;
 esac

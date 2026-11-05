@@ -66,7 +66,12 @@ h2 { margin-bottom: 0; font-size: 1.25rem; letter-spacing: -.02em; }
 .section-heading, .page-title.with-action, .code-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 18px; }
 .action-button { min-height: 52px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--text); background: var(--surface-soft); font-weight: 800; cursor: pointer; transition: transform .12s ease, opacity .12s ease, background .12s ease; }
-.action-button:active { transform: scale(.98); }
+.action-button:active, .icon-button:active, .text-button:active, .panel-button:active, .bottom-nav button:active, .wifi-chip:active { transform: scale(.94); filter: brightness(1.25); }
+.tap-feedback { animation: tap-feedback .32s ease; }
+@keyframes tap-feedback { 0% { transform: scale(1); } 45% { transform: scale(.92); filter: brightness(1.3); } 100% { transform: scale(1); } }
+.is-loading { position: relative; padding-right: 38px !important; }
+.is-loading::after { content: ""; position: absolute; right: 14px; top: 50%; width: 14px; height: 14px; margin-top: -8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: button-spin .7s linear infinite; }
+@keyframes button-spin { to { transform: rotate(360deg); } }
 .action-button:disabled { opacity: .45; cursor: not-allowed; }
 .action-button.primary { border-color: transparent; color: #052018; background: var(--primary); }
 .action-button.accent { border-color: rgba(255,207,112,.28); color: var(--accent); background: rgba(255,207,112,.08); }
@@ -108,6 +113,11 @@ textarea { resize: vertical; padding: 14px; line-height: 1.45; }
 .inline-actions { display: flex; align-items: center; gap: 8px; }
 .field-badge { padding: 5px 8px; border-radius: 999px; color: var(--primary); background: rgba(115,224,177,.08); font-size: .68rem; font-weight: 750; }
 .embedded-switches { margin: 0 0 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.saved-wifi-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 9px; color: var(--muted); font-size: .78rem; font-weight: 700; }
+.wifi-chip-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; }
+.wifi-chip { min-height: 36px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); background: var(--surface-raised); font-size: .76rem; cursor: pointer; }
+.wifi-chip.selected { border-color: var(--primary); color: var(--primary); background: rgba(115,224,177,.09); }
+.empty-hint { align-self: center; color: var(--muted); font-size: .74rem; }
 code { color: var(--primary); }
 .switch-list { padding-top: 6px; padding-bottom: 6px; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--line); cursor: pointer; }

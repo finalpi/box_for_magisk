@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#071713">
   <title>Box Control</title>
-  <link rel="stylesheet" href="./styles.css?v=1.11.5">
+  <link rel="stylesheet" href="./styles.css?v=1.11.6">
 </head>
 <body>
   <div class="app-shell">
@@ -137,6 +137,8 @@
             <label for="wifiSsids">SSID 列表</label>
             <textarea id="wifiSsids" rows="5" placeholder="每行一个 SSID，支持空格" autocomplete="off" spellcheck="false"></textarea>
             <p class="field-help" id="ssidSource">每行一个 SSID；保存并应用后生效。</p>
+            <div class="saved-wifi-heading"><span>已保存的 Wi-Fi</span><button class="text-button" id="refreshSavedWifiButton" type="button">刷新列表</button></div>
+            <div class="wifi-chip-list" id="savedWifiList"><span class="empty-hint">进入配置页后读取系统已保存网络</span></div>
           </section>
           <div class="sticky-actions">
             <button class="action-button" id="saveSettingsButton" type="button">仅保存</button>
@@ -182,6 +184,6 @@
       <div class="sheet-handle" aria-hidden="true"></div><h2 id="operationTitle">正在执行</h2><pre id="operationOutput">请稍候…</pre><button class="action-button" type="button" data-close-sheet>关闭</button>
     </section>
   </div>
-  <script src="./app.js?v=1.11.5"></script>
+  <script src="./app.js?v=1.11.6"></script>
 </body>
 </html>

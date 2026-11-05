@@ -1,3 +1,9 @@
+#### Changelog v1.11.6 - 05-11-26
+- Add visible tap animation and loading feedback to WebUI buttons
+- List Android saved Wi-Fi networks for one-tap SSID rule selection
+- Keep manual SSID entry and allow saved-network chips to be toggled
+- Remove post-write content comparison from subscription, SSID and quick-setting saves
+
 #### Changelog v1.11.5 - 05-11-26
 - Avoid fully loading settings.ini before simple subscription and SSID writes
 - Return verified subscription and SSID values from the same root command that writes them
