@@ -2,6 +2,7 @@
   'use strict';
 
   const CONTROL = '/data/adb/box/scripts/webui.service';
+  const previewMode = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
   const state = {
     status: {}, settings: {}, kernel: {}, config: '', busy: false, panelUrl: '',
     traffic: { rx: 0, tx: 0, time: 0, loading: false, downHistory: [], upHistory: [] },
@@ -49,7 +50,8 @@
   function exec(commandText) {
     return new Promise((resolve, reject) => {
       if (!window.ksu || typeof window.ksu.exec !== 'function') {
-        resolve({ code: 0, stdout: demoResponse(commandText), stderr: '', demo: true });
+        if (previewMode) resolve({ code: 0, stdout: demoResponse(commandText), stderr: '', demo: true });
+        else reject(new Error('KernelSU WebUI bridge unavailable'));
         return;
       }
       const callbackName = `__boxControlCallback${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -154,6 +156,7 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (page === 'config' && !state.config) loadConfig();
     if (page === 'logs') loadLogs();
+    if (page === 'mihomo') loadPanel(false);
   }
 
   async function loadStatus() {
@@ -188,6 +191,8 @@
       ['bin_name', 'network_mode'].forEach((key) => { if (form.elements[key]) form.elements[key].value = state.settings[key] || ''; });
       ['ipv6', 'renew', 'update_subscription', 'run_crontab', 'custom_rules_subs'].forEach((key) => { form.elements[key].checked = state.settings[key] === 'true'; });
       $('#subscriptionUrls').value = state.settings.subscription_urls || '';
+      const count = (state.settings.subscription_urls || '').split(/\r?\n/).filter(Boolean).length;
+      $('#subscriptionSource').innerHTML = `已从 <code>/data/adb/box/settings.ini</code> 读取 ${count} 个地址，页面不会向外发送。`;
       $('#subscriptionStateValue').textContent = state.settings.update_subscription === 'true' ? '已开启' : '已关闭';
       $('#cronStateValue').textContent = state.settings.run_crontab === 'true' ? '已开启' : '已关闭';
     } catch (error) {
@@ -435,6 +440,22 @@
     window.location.href = state.panelUrl;
   }
 
+  function loadPanel(force) {
+    const frame = $('#mihomoFrame');
+    const status = $('#panelFrameStatus');
+    if (!state.panelUrl) {
+      status.textContent = '未找到 Mihomo external-controller 地址，请先启动 Clash。';
+      frame.classList.remove('loaded');
+      return;
+    }
+    const target = force ? `${state.panelUrl}${state.panelUrl.includes('?') ? '&' : '?'}_=${Date.now()}` : state.panelUrl;
+    if (!force && frame.dataset.url === state.panelUrl) return;
+    status.textContent = '正在连接本机 Mihomo 面板…';
+    frame.classList.remove('loaded');
+    frame.dataset.url = state.panelUrl;
+    frame.src = target;
+  }
+
   $$('[data-nav]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.nav)));
   $$('[data-go]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.go)));
   $$('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.action)));
@@ -445,8 +466,19 @@
   $('#reloadConfigButton').addEventListener('click', loadConfig);
   $('#copyConfigButton').addEventListener('click', copyConfig);
   $('#reloadLogsButton').addEventListener('click', loadLogs);
-  $('#openPanelButton').addEventListener('click', openPanel);
+  $('#openPanelButton').addEventListener('click', () => navigate('mihomo'));
+  $('#externalPanelButton').addEventListener('click', openPanel);
+  $('#reloadPanelButton').addEventListener('click', () => loadPanel(true));
+  $('#mihomoFrame').addEventListener('load', () => {
+    $('#mihomoFrame').classList.add('loaded');
+    $('#panelFrameStatus').textContent = '';
+  });
+  $('#mihomoFrame').addEventListener('error', () => {
+    $('#mihomoFrame').classList.remove('loaded');
+    $('#panelFrameStatus').textContent = '面板无法内嵌，请使用下方按钮打开。';
+  });
   $('#refreshLatencyButton').addEventListener('click', loadLatency);
+  $('#reloadSubscriptionsButton').addEventListener('click', loadSettings);
   $('#updateKernelButton').addEventListener('click', updateKernel);
   window.addEventListener('resize', drawSpeedChart);
   Promise.all([loadStatus(), loadSettings(), loadKernelInfo(), loadTraffic(), loadLatency()]);

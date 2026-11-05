@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#071713">
   <title>Box Control</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=1.11.2">
 </head>
 <body>
   <div class="app-shell">
@@ -114,9 +114,12 @@
             <label class="switch-row"><span><strong>订阅规则</strong><small>同时读取订阅内的 rules 字段</small></span><input type="checkbox" name="custom_rules_subs"><i aria-hidden="true"></i></label>
           </section>
           <section class="form-card">
-            <label for="subscriptionUrls">Mihomo 订阅地址</label>
+            <div class="field-heading">
+              <label for="subscriptionUrls">Mihomo 订阅地址</label>
+              <button class="text-button" id="reloadSubscriptionsButton" type="button">重新读取</button>
+            </div>
             <textarea id="subscriptionUrls" rows="6" placeholder="每行一个 http:// 或 https:// 地址" autocomplete="off" spellcheck="false"></textarea>
-            <p class="field-help">地址仅保存在设备的 <code>settings.ini</code>，页面不会向外发送。</p>
+            <p class="field-help" id="subscriptionSource">读取自 <code>/data/adb/box/settings.ini</code>，页面不会向外发送。</p>
           </section>
           <div class="sticky-actions">
             <button class="action-button" id="saveSettingsButton" type="submit">保存设置</button>
@@ -136,10 +139,22 @@
         <div class="page-title with-action"><div><p class="eyebrow">RUNTIME LOG</p><h2 id="logsTitle">运行日志</h2></div><button class="text-button" id="reloadLogsButton" type="button">刷新</button></div>
         <pre class="code-view logs" id="logsContent" tabindex="0">正在读取日志…</pre>
       </section>
+
+      <section class="page panel-page" data-page="mihomo" aria-labelledby="mihomoTitle">
+        <div class="page-title with-action">
+          <div><p class="eyebrow">MIHOMO DASHBOARD</p><h2 id="mihomoTitle">Mihomo 面板</h2></div>
+          <button class="text-button" id="reloadPanelButton" type="button">重新加载</button>
+        </div>
+        <div class="panel-frame-wrap">
+          <p id="panelFrameStatus">正在连接本机 Mihomo 面板…</p>
+          <iframe id="mihomoFrame" title="Mihomo 面板" src="about:blank"></iframe>
+        </div>
+        <button class="panel-button fallback-panel-button" id="externalPanelButton" type="button">无法内嵌时在当前 WebView 打开</button>
+      </section>
     </main>
 
     <nav class="bottom-nav" aria-label="主导航">
-      <button class="active" type="button" data-nav="overview"><span>概览</span></button><button type="button" data-nav="settings"><span>配置</span></button><button type="button" data-nav="config"><span>原始文件</span></button><button type="button" data-nav="logs"><span>日志</span></button>
+      <button class="active" type="button" data-nav="overview"><span>概览</span></button><button type="button" data-nav="settings"><span>配置</span></button><button type="button" data-nav="config"><span>原始文件</span></button><button type="button" data-nav="logs"><span>日志</span></button><button type="button" data-nav="mihomo"><span>Mihomo</span></button>
     </nav>
   </div>
 
@@ -150,6 +165,6 @@
       <div class="sheet-handle" aria-hidden="true"></div><h2 id="operationTitle">正在执行</h2><pre id="operationOutput">请稍候…</pre><button class="action-button" type="button" data-close-sheet>关闭</button>
     </section>
   </div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=1.11.2"></script>
 </body>
 </html>

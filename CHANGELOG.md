@@ -1,3 +1,10 @@
+#### Changelog v1.11.2 - 05-11-26
+- Fix latest Mihomo version lookup on Android without storing the large GitHub response in an argument
+- Show the exact settings.ini subscription source and add a manual reload action
+- Stop production WebUI from silently falling back to demo subscription data
+- Add a bottom Mihomo tab with an embedded dashboard and an external fallback
+- Bust cached WebUI assets after module upgrades
+
 #### Changelog v1.11.1 - 05-11-26
 - Add live download and upload speed monitoring with a one-minute trend chart
 - Add HTTPS access latency checks for Baidu, Google and YouTube
