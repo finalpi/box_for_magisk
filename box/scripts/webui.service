@@ -10,8 +10,11 @@ fail() { echo "$1" >&2; exit 1; }
 
 [ -f "${settings_path}" ] || fail "settings.ini not found"
 "${box_shell}" -n "${settings_path}" 2>/dev/null || fail "settings.ini contains a syntax error"
-# shellcheck disable=SC1090
-source "${settings_path}"
+
+load_settings() {
+  # shellcheck disable=SC1090
+  source "${settings_path}"
+}
 
 encode_value() { printf '%s' "$1" | busybox base64 | tr -d '\n'; }
 emit() { printf '%s=%s\n' "$1" "$(encode_value "$2")"; }
@@ -21,14 +24,17 @@ replace_line() {
   key="$1"
   value="$2"
   temp="${control_run_dir}/settings.webui.$$"
-  found="false"
-  while IFS= read -r line || [ -n "${line}" ]; do
-    case "${line}" in
-      "${key}="*) printf '%s=%s\n' "${key}" "${value}"; found="true" ;;
-      *) printf '%s\n' "${line}" ;;
-    esac
-  done < "${settings_path}" > "${temp}" || return 1
-  [ "${found}" = "true" ] || printf '%s=%s\n' "${key}" "${value}" >> "${temp}"
+  line_number="$(grep -n -m 1 "^${key}=" "${settings_path}" | cut -d: -f1)"
+  if [ -n "${line_number}" ]; then
+    before_count=$((line_number - 1))
+    after_line=$((line_number + 1))
+    [ "${before_count}" -gt 0 ] && head -n "${before_count}" "${settings_path}" > "${temp}" || : > "${temp}"
+    printf '%s=%s\n' "${key}" "${value}" >> "${temp}"
+    tail -n "+${after_line}" "${settings_path}" >> "${temp}"
+  else
+    cat "${settings_path}" > "${temp}" || return 1
+    printf '%s=%s\n' "${key}" "${value}" >> "${temp}"
+  fi
   "${box_shell}" -n "${temp}" 2>/dev/null || { rm -f "${temp}"; return 1; }
   cat "${temp}" > "${settings_path}"
   rm -f "${temp}"
@@ -206,6 +212,7 @@ set_value() {
 set_subscriptions() {
   encoded_list="$1"
   output="("
+  saved_urls=""
   old_ifs="${IFS}"
   IFS=','
   for encoded in ${encoded_list}; do
@@ -213,6 +220,9 @@ set_subscriptions() {
     url="$(decode_value "${encoded}")" || fail "invalid subscription encoding"
     case "${url}" in http://*|https://*) ;; *) fail "subscription URL must use http or https" ;; esac
     case "${url}" in *$'\n'*|*$'\r'*) fail "subscription URL contains a line break" ;; esac
+    [ -n "${saved_urls}" ] && saved_urls="${saved_urls}
+"
+    saved_urls="${saved_urls}${url}"
     escaped="$(double_quote "${url}")"
     output="${output}\"${escaped}\" "
   done
@@ -220,18 +230,24 @@ set_subscriptions() {
   output="${output% })"
   [ "${output}" = "(" ] && output="()"
   replace_line "subscription_url_clash" "${output}" || fail "failed to update subscriptions"
-  echo "Saved subscription URLs"
+  actual_line="$(grep -m 1 '^subscription_url_clash=' "${settings_path}")"
+  [ "${actual_line}" = "subscription_url_clash=${output}" ] || fail "subscription write verification failed"
+  emit subscription_urls "${saved_urls}"
 }
 
 set_ssids() {
   encoded_list="$1"
   output="("
+  saved_ssids=""
   old_ifs="${IFS}"
   IFS=','
   for encoded in ${encoded_list}; do
     [ -z "${encoded}" ] && continue
     ssid="$(decode_value "${encoded}")" || fail "invalid SSID encoding"
     case "${ssid}" in *$'\n'*|*$'\r'*) fail "SSID contains a line break" ;; esac
+    [ -n "${saved_ssids}" ] && saved_ssids="${saved_ssids}
+"
+    saved_ssids="${saved_ssids}${ssid}"
     escaped="$(double_quote "${ssid}")"
     output="${output}\"${escaped}\" "
   done
@@ -239,7 +255,9 @@ set_ssids() {
   output="${output% })"
   [ "${output}" = "(" ] && output="()"
   replace_line "wifi_ssids_list" "${output}" || fail "failed to update SSID list"
-  echo "Saved SSID list"
+  actual_line="$(grep -m 1 '^wifi_ssids_list=' "${settings_path}")"
+  [ "${actual_line}" = "wifi_ssids_list=${output}" ] || fail "SSID write verification failed"
+  emit wifi_ssids "${saved_ssids}"
 }
 
 run_service_action() {
@@ -267,8 +285,8 @@ read_config() {
 }
 
 case "$1" in
-  status) read_status ;;
-  settings) read_settings ;;
+  status) load_settings; read_status ;;
+  settings) load_settings; read_settings ;;
   traffic) read_traffic ;;
   latency) read_latency ;;
   kernel-info) read_kernel_info ;;
@@ -276,7 +294,7 @@ case "$1" in
   set-subscriptions) set_subscriptions "$2" ;;
   set-ssids) set_ssids "$2" ;;
   start|stop|restart|subscription|update-kernel) run_service_action "$1" ;;
-  config) read_config ;;
-  logs) [ -f "${box_log}" ] && tail -n 240 "${box_log}" || echo "No runtime log found." ;;
+  config) load_settings; read_config ;;
+  logs) load_settings; [ -f "${box_log}" ] && tail -n 240 "${box_log}" || echo "No runtime log found." ;;
   *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|set|set-subscriptions|set-ssids|start|stop|restart|subscription|update-kernel|config|logs}" ;;
 esac

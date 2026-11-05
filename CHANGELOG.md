@@ -1,3 +1,10 @@
+#### Changelog v1.11.5 - 05-11-26
+- Avoid fully loading settings.ini before simple subscription and SSID writes
+- Return verified subscription and SSID values from the same root command that writes them
+- Reduce dedicated Clash/Mihomo subscription saving from three root calls to one
+- Fix the false “subscription write verification failed” result after a successful write
+- Replace only the target line without spawning a process for every settings.ini line
+
 #### Changelog v1.11.4 - 05-11-26
 - Add a dedicated Clash/Mihomo subscription save action with write-after-read verification
 - Keep Clash subscriptions isolated from other core configurations

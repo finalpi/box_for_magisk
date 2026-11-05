@@ -408,11 +408,11 @@
   }
 
   async function writeAndVerifyLists(urls, ssids) {
-    await exec(command('set-subscriptions', [urls.map((url) => encode(url)).join(',')]));
-    await exec(command('set-ssids', [ssids.map((ssid) => encode(ssid)).join(',')]));
+    const subscriptionResult = parsePairs((await exec(command('set-subscriptions', [urls.map((url) => encode(url)).join(',')]))).stdout);
+    if (!sameList(subscriptionResult.subscription_urls, urls)) throw new Error('Clash/Mihomo 订阅地址写入校验失败');
+    const ssidResult = parsePairs((await exec(command('set-ssids', [ssids.map((ssid) => encode(ssid)).join(',')]))).stdout);
+    if (!sameList(ssidResult.wifi_ssids, ssids)) throw new Error('SSID 列表写入校验失败');
     const verified = parsePairs((await exec(command('settings'))).stdout);
-    if (!sameList(verified.subscription_urls, urls)) throw new Error('Clash/Mihomo 订阅地址写入校验失败');
-    if (!sameList(verified.wifi_ssids, ssids)) throw new Error('SSID 列表写入校验失败');
     return verified;
   }
 
@@ -422,13 +422,12 @@
     setBusy(true);
     showOperation('保存 Clash/Mihomo 订阅', '正在写入 settings.ini…');
     try {
-      await exec(command('set-subscriptions', [data.urls.map((url) => encode(url)).join(',')]));
-      const verified = parsePairs((await exec(command('settings'))).stdout);
+      const verified = parsePairs((await exec(command('set-subscriptions', [data.urls.map((url) => encode(url)).join(',')]))).stdout);
       if (!sameList(verified.subscription_urls, data.urls)) throw new Error('写入后读取的订阅地址不一致');
-      state.settings = verified;
+      state.settings.subscription_urls = data.urls.join('\n');
+      $('#subscriptionSource').innerHTML = `已从 <code>subscription_url_clash</code> 写入并校验 ${data.urls.length} 个 Clash/Mihomo 地址。`;
       $('#operationOutput').textContent = `已写入并校验 ${data.urls.length} 个 Clash/Mihomo 订阅地址。`;
       toast('订阅地址已写入 settings.ini');
-      await loadSettings();
     } catch (error) {
       $('#operationOutput').textContent = `保存失败\n\n${error.message}`;
     } finally { setBusy(false); }
