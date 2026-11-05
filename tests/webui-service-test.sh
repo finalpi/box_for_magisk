@@ -35,6 +35,14 @@ bash -n "${test_dir}/settings.ini"
 saved_urls="$(BOX_DIR="${test_dir}" BOX_SHELL="/usr/bin/bash" bash "${control}" settings | grep '^subscription_urls=' | cut -d= -f2- | base64 -d)"
 [[ "${saved_urls}" == "${first_url}"$'\n'"${second_url}" ]]
 
+first_ssid="Home WiFi"
+second_ssid='Cafe $Guest'
+encoded_ssids="$(printf '%s' "${first_ssid}" | base64 -w0),$(printf '%s' "${second_ssid}" | base64 -w0)"
+bash "${control}" set-ssids "${encoded_ssids}" >/dev/null
+bash -n "${test_dir}/settings.ini"
+saved_ssids="$(BOX_DIR="${test_dir}" BOX_SHELL="/usr/bin/bash" bash "${control}" settings | grep '^wifi_ssids=' | cut -d= -f2- | base64 -d)"
+[[ "${saved_ssids}" == "${first_ssid}"$'\n'"${second_ssid}" ]]
+
 if bash "${control}" set bin_name aW52YWxpZA== >/dev/null 2>&1; then
   echo "invalid core was accepted" >&2
   exit 1

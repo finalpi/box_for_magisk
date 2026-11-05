@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#071713">
   <title>Box Control</title>
-  <link rel="stylesheet" href="./styles.css?v=1.11.3">
+  <link rel="stylesheet" href="./styles.css?v=1.11.4">
 </head>
 <body>
   <div class="app-shell">
@@ -115,15 +115,32 @@
           </section>
           <section class="form-card">
             <div class="field-heading">
-              <label for="subscriptionUrls">Mihomo 订阅地址</label>
-              <button class="text-button" id="reloadSubscriptionsButton" type="button">重新读取</button>
+              <label for="subscriptionUrls">Clash/Mihomo 订阅地址</label>
+              <div class="inline-actions"><button class="text-button" id="reloadSubscriptionsButton" type="button">重新读取</button><button class="text-button" id="saveSubscriptionsButton" type="button">保存订阅</button></div>
             </div>
             <textarea id="subscriptionUrls" rows="6" placeholder="每行一个 http:// 或 https:// 地址" autocomplete="off" spellcheck="false"></textarea>
             <p class="field-help" id="subscriptionSource">读取自 <code>/data/adb/box/settings.ini</code>，页面不会向外发送。</p>
           </section>
+          <section class="form-card">
+            <div class="field-heading"><label for="ssidListMode">SSID 排除列表</label><span class="field-badge">模块级</span></div>
+            <div class="switch-list embedded-switches">
+              <label class="switch-row"><span><strong>网络状态控制</strong><small>根据 Wi-Fi 状态自动控制模块服务</small></span><input type="checkbox" name="enable_network_service_control"><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><strong>启用 SSID 匹配</strong><small>按下方列表决定是否启用模块</small></span><input type="checkbox" name="use_ssid_matching"><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><strong>Wi-Fi 断开时启用</strong><small>切换到移动网络时启动模块</small></span><input type="checkbox" name="use_module_on_wifi_disconnect"><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><strong>连接 Wi-Fi 时启用</strong><small>连接普通 Wi-Fi 时保持模块运行</small></span><input type="checkbox" name="use_module_on_wifi"><i aria-hidden="true"></i></label>
+            </div>
+            <label for="ssidListMode">匹配模式</label>
+            <select id="ssidListMode" name="use_wifi_list_mode">
+              <option value="blacklist">排除列表：匹配时停用</option>
+              <option value="whitelist">允许列表：仅匹配时启用</option>
+            </select>
+            <label for="wifiSsids">SSID 列表</label>
+            <textarea id="wifiSsids" rows="5" placeholder="每行一个 SSID，支持空格" autocomplete="off" spellcheck="false"></textarea>
+            <p class="field-help" id="ssidSource">每行一个 SSID；保存并应用后生效。</p>
+          </section>
           <div class="sticky-actions">
-            <button class="action-button" id="saveSettingsButton" type="submit">保存设置</button>
-            <button class="action-button primary" id="saveRestartButton" type="button">保存并重启</button>
+            <button class="action-button" id="saveSettingsButton" type="button">仅保存</button>
+            <button class="action-button primary" id="saveRestartButton" type="submit">保存并应用</button>
           </div>
         </form>
       </section>
@@ -165,6 +182,6 @@
       <div class="sheet-handle" aria-hidden="true"></div><h2 id="operationTitle">正在执行</h2><pre id="operationOutput">请稍候…</pre><button class="action-button" type="button" data-close-sheet>关闭</button>
     </section>
   </div>
-  <script src="./app.js?v=1.11.3"></script>
+  <script src="./app.js?v=1.11.4"></script>
 </body>
 </html>

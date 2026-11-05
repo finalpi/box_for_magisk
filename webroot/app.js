@@ -193,11 +193,14 @@
       const result = await exec(command('settings'));
       state.settings = parsePairs(result.stdout);
       const form = $('#settingsForm');
-      ['bin_name', 'network_mode'].forEach((key) => { if (form.elements[key]) form.elements[key].value = state.settings[key] || ''; });
-      ['ipv6', 'renew', 'update_subscription', 'run_crontab', 'custom_rules_subs'].forEach((key) => { form.elements[key].checked = state.settings[key] === 'true'; });
+      ['bin_name', 'network_mode', 'use_wifi_list_mode'].forEach((key) => { if (form.elements[key]) form.elements[key].value = state.settings[key] || ''; });
+      ['ipv6', 'renew', 'update_subscription', 'run_crontab', 'custom_rules_subs', 'enable_network_service_control', 'use_module_on_wifi_disconnect', 'use_module_on_wifi', 'use_ssid_matching'].forEach((key) => { form.elements[key].checked = state.settings[key] === 'true'; });
       $('#subscriptionUrls').value = state.settings.subscription_urls || '';
       const count = (state.settings.subscription_urls || '').split(/\r?\n/).filter(Boolean).length;
-      $('#subscriptionSource').innerHTML = `已从 <code>/data/adb/box/settings.ini</code> 读取 ${count} 个地址，页面不会向外发送。`;
+      $('#subscriptionSource').innerHTML = `已从 <code>subscription_url_clash</code> 读取 ${count} 个 Clash/Mihomo 地址。`;
+      $('#wifiSsids').value = state.settings.wifi_ssids || '';
+      const ssidCount = (state.settings.wifi_ssids || '').split(/\r?\n/).filter(Boolean).length;
+      $('#ssidSource').textContent = `已从 settings.ini 读取 ${ssidCount} 个 SSID；保存并应用后生效。`;
       $('#subscriptionStateValue').textContent = state.settings.update_subscription === 'true' ? '已开启' : '已关闭';
       $('#cronStateValue').textContent = state.settings.run_crontab === 'true' ? '已开启' : '已关闭';
     } catch (error) {
@@ -389,12 +392,46 @@
   function collectSettings() {
     const form = $('#settingsForm');
     const values = {};
-    ['bin_name', 'network_mode'].forEach((key) => { values[key] = form.elements[key].value; });
-    ['ipv6', 'renew', 'update_subscription', 'run_crontab', 'custom_rules_subs'].forEach((key) => { values[key] = form.elements[key].checked ? 'true' : 'false'; });
+    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+    ['bin_name', 'network_mode', 'use_wifi_list_mode'].forEach((key) => { values[key] = form.elements[key].value; });
+    ['ipv6', 'renew', 'update_subscription', 'run_crontab', 'custom_rules_subs', 'enable_network_service_control', 'use_module_on_wifi_disconnect', 'use_module_on_wifi', 'use_ssid_matching'].forEach((key) => { values[key] = form.elements[key].checked ? 'true' : 'false'; });
     const urls = $('#subscriptionUrls').value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean);
     const invalid = urls.find((url) => !/^https?:\/\/\S+$/i.test(url));
     if (invalid) throw new Error(`订阅地址格式不正确：${invalid}`);
-    return { values, urls };
+    const ssids = $('#wifiSsids').value.split(/\r?\n/).map((ssid) => ssid.trim()).filter(Boolean);
+    return { values, urls, ssids };
+  }
+
+  function sameList(actual, expected) {
+    const values = String(actual || '').split(/\r?\n/).filter(Boolean);
+    return values.length === expected.length && values.every((value, index) => value === expected[index]);
+  }
+
+  async function writeAndVerifyLists(urls, ssids) {
+    await exec(command('set-subscriptions', [urls.map((url) => encode(url)).join(',')]));
+    await exec(command('set-ssids', [ssids.map((ssid) => encode(ssid)).join(',')]));
+    const verified = parsePairs((await exec(command('settings'))).stdout);
+    if (!sameList(verified.subscription_urls, urls)) throw new Error('Clash/Mihomo 订阅地址写入校验失败');
+    if (!sameList(verified.wifi_ssids, ssids)) throw new Error('SSID 列表写入校验失败');
+    return verified;
+  }
+
+  async function saveSubscriptionsOnly() {
+    let data;
+    try { data = collectSettings(); } catch (error) { toast(error.message); return; }
+    setBusy(true);
+    showOperation('保存 Clash/Mihomo 订阅', '正在写入 settings.ini…');
+    try {
+      await exec(command('set-subscriptions', [data.urls.map((url) => encode(url)).join(',')]));
+      const verified = parsePairs((await exec(command('settings'))).stdout);
+      if (!sameList(verified.subscription_urls, data.urls)) throw new Error('写入后读取的订阅地址不一致');
+      state.settings = verified;
+      $('#operationOutput').textContent = `已写入并校验 ${data.urls.length} 个 Clash/Mihomo 订阅地址。`;
+      toast('订阅地址已写入 settings.ini');
+      await loadSettings();
+    } catch (error) {
+      $('#operationOutput').textContent = `保存失败\n\n${error.message}`;
+    } finally { setBusy(false); }
   }
 
   async function saveSettings(restart) {
@@ -404,7 +441,10 @@
     showOperation(restart ? '保存设置并重启' : '保存设置');
     try {
       for (const [key, value] of Object.entries(data.values)) await exec(command('set', [key, encode(value)]));
-      await exec(command('set-subscriptions', [data.urls.map((url) => encode(url)).join(',')]));
+      const verified = await writeAndVerifyLists(data.urls, data.ssids);
+      for (const [key, value] of Object.entries(data.values)) {
+        if (verified[key] !== value) throw new Error(`${key} 写入校验失败`);
+      }
       let output = '设置已保存。';
       if (restart) {
         const result = await exec(command('restart'));
@@ -492,8 +532,8 @@
   $$('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.action)));
   $$('[data-close-sheet]').forEach((element) => element.addEventListener('click', closeOperation));
   $('#refreshButton').addEventListener('click', () => Promise.all([loadStatus(), loadSettings(), loadKernelInfo(), loadTraffic(), loadLatency()]));
-  $('#settingsForm').addEventListener('submit', (event) => { event.preventDefault(); saveSettings(false); });
-  $('#saveRestartButton').addEventListener('click', () => saveSettings(true));
+  $('#settingsForm').addEventListener('submit', (event) => { event.preventDefault(); saveSettings(true); });
+  $('#saveSettingsButton').addEventListener('click', () => saveSettings(false));
   $('#reloadConfigButton').addEventListener('click', loadConfig);
   $('#copyConfigButton').addEventListener('click', copyConfig);
   $('#reloadLogsButton').addEventListener('click', loadLogs);
@@ -510,6 +550,7 @@
   });
   $('#refreshLatencyButton').addEventListener('click', loadLatency);
   $('#reloadSubscriptionsButton').addEventListener('click', loadSettings);
+  $('#saveSubscriptionsButton').addEventListener('click', saveSubscriptionsOnly);
   $('#updateKernelButton').addEventListener('click', updateKernel);
   window.addEventListener('resize', drawSpeedChart);
   restoreCachedKernelInfo();

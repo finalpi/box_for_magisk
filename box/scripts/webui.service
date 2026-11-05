@@ -87,6 +87,11 @@ read_settings() {
   emit update_subscription "${update_subscription}"
   emit run_crontab "${run_crontab}"
   emit custom_rules_subs "${custom_rules_subs}"
+  emit enable_network_service_control "${enable_network_service_control}"
+  emit use_module_on_wifi_disconnect "${use_module_on_wifi_disconnect}"
+  emit use_module_on_wifi "${use_module_on_wifi}"
+  emit use_ssid_matching "${use_ssid_matching}"
+  emit use_wifi_list_mode "${use_wifi_list_mode}"
   urls=""
   for url in "${subscription_url_clash[@]}"; do
     [ -n "${urls}" ] && urls="${urls}
@@ -94,6 +99,13 @@ read_settings() {
     urls="${urls}${url}"
   done
   emit subscription_urls "${urls}"
+  ssids=""
+  for ssid in "${wifi_ssids_list[@]}"; do
+    [ -n "${ssids}" ] && ssids="${ssids}
+"
+    ssids="${ssids}${ssid}"
+  done
+  emit wifi_ssids "${ssids}"
 }
 
 read_traffic() {
@@ -183,7 +195,8 @@ set_value() {
   case "${key}" in
     bin_name) case "${decoded}" in clash|sing-box|xray|v2fly|hysteria) ;; *) fail "unsupported core" ;; esac ;;
     network_mode) case "${decoded}" in tproxy|redirect|mixed|enhance|tun) ;; *) fail "unsupported network mode" ;; esac ;;
-    ipv6|renew|update_subscription|run_crontab|custom_rules_subs) case "${decoded}" in true|false) ;; *) fail "boolean value required" ;; esac ;;
+    ipv6|renew|update_subscription|run_crontab|custom_rules_subs|enable_network_service_control|use_module_on_wifi_disconnect|use_module_on_wifi|use_ssid_matching) case "${decoded}" in true|false) ;; *) fail "boolean value required" ;; esac ;;
+    use_wifi_list_mode) case "${decoded}" in blacklist|whitelist) ;; *) fail "unsupported SSID list mode" ;; esac ;;
     *) fail "setting is not editable" ;;
   esac
   replace_line "${key}" "\"${decoded}\"" || fail "failed to update settings.ini"
@@ -208,6 +221,25 @@ set_subscriptions() {
   [ "${output}" = "(" ] && output="()"
   replace_line "subscription_url_clash" "${output}" || fail "failed to update subscriptions"
   echo "Saved subscription URLs"
+}
+
+set_ssids() {
+  encoded_list="$1"
+  output="("
+  old_ifs="${IFS}"
+  IFS=','
+  for encoded in ${encoded_list}; do
+    [ -z "${encoded}" ] && continue
+    ssid="$(decode_value "${encoded}")" || fail "invalid SSID encoding"
+    case "${ssid}" in *$'\n'*|*$'\r'*) fail "SSID contains a line break" ;; esac
+    escaped="$(double_quote "${ssid}")"
+    output="${output}\"${escaped}\" "
+  done
+  IFS="${old_ifs}"
+  output="${output% })"
+  [ "${output}" = "(" ] && output="()"
+  replace_line "wifi_ssids_list" "${output}" || fail "failed to update SSID list"
+  echo "Saved SSID list"
 }
 
 run_service_action() {
@@ -242,8 +274,9 @@ case "$1" in
   kernel-info) read_kernel_info ;;
   set) set_value "$2" "$3" ;;
   set-subscriptions) set_subscriptions "$2" ;;
+  set-ssids) set_ssids "$2" ;;
   start|stop|restart|subscription|update-kernel) run_service_action "$1" ;;
   config) read_config ;;
   logs) [ -f "${box_log}" ] && tail -n 240 "${box_log}" || echo "No runtime log found." ;;
-  *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|set|set-subscriptions|start|stop|restart|subscription|update-kernel|config|logs}" ;;
+  *) fail "Usage: $0 {status|settings|traffic|latency|kernel-info|set|set-subscriptions|set-ssids|start|stop|restart|subscription|update-kernel|config|logs}" ;;
 esac

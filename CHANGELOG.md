@@ -1,3 +1,10 @@
+#### Changelog v1.11.4 - 05-11-26
+- Add a dedicated Clash/Mihomo subscription save action with write-after-read verification
+- Keep Clash subscriptions isolated from other core configurations
+- Add module network-state controls and editable SSID blacklist/whitelist settings
+- Verify all quick settings and SSID values after writing settings.ini
+- Make “Save and apply” the primary action and keep “Save only” explicit
+
 #### Changelog v1.11.3 - 05-11-26
 - Render local service status and current kernel version before network requests
 - Run latest-version and latency checks through the asynchronous KernelSU process bridge

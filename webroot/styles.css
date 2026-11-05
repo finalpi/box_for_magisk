@@ -105,6 +105,9 @@ textarea { resize: vertical; padding: 14px; line-height: 1.45; }
 .field-help { margin: 10px 2px 0; color: var(--muted); font-size: .76rem; line-height: 1.45; }
 .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 8px; }
 .field-heading label { color: var(--muted); font-size: .82rem; font-weight: 700; }
+.inline-actions { display: flex; align-items: center; gap: 8px; }
+.field-badge { padding: 5px 8px; border-radius: 999px; color: var(--primary); background: rgba(115,224,177,.08); font-size: .68rem; font-weight: 750; }
+.embedded-switches { margin: 0 0 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 code { color: var(--primary); }
 .switch-list { padding-top: 6px; padding-bottom: 6px; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
