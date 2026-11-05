@@ -1,5 +1,117 @@
-<!DOCTYPE html>
-<script>
-    document.location = 'http://127.0.0.1:9090/ui/'
-</script>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#071713">
+  <title>Box Control</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div><p class="eyebrow">BOX FOR ROOT</p><h1>Box Control</h1></div>
+      <button class="icon-button" id="refreshButton" type="button" aria-label="刷新状态">刷新</button>
+    </header>
+
+    <main>
+      <section class="page active" data-page="overview" aria-labelledby="overviewTitle">
+        <h2 class="sr-only" id="overviewTitle">运行概览</h2>
+        <article class="status-card">
+          <div class="status-heading">
+            <span class="status-indicator" id="statusIndicator" aria-hidden="true"></span>
+            <div><p class="status-label" id="statusLabel">正在读取状态</p><p class="status-detail" id="statusDetail">请稍候…</p></div>
+          </div>
+          <div class="status-grid">
+            <div><span>核心</span><strong id="coreValue">—</strong></div>
+            <div><span>模式</span><strong id="modeValue">—</strong></div>
+            <div><span>PID</span><strong id="pidValue">—</strong></div>
+            <div><span>运行时间</span><strong id="uptimeValue">—</strong></div>
+          </div>
+        </article>
+
+        <section class="section-block" aria-labelledby="actionsTitle">
+          <div class="section-heading"><div><p class="eyebrow">SERVICE</p><h2 id="actionsTitle">服务控制</h2></div></div>
+          <div class="action-grid">
+            <button class="action-button primary" type="button" data-action="start">开启</button>
+            <button class="action-button" type="button" data-action="stop">关闭</button>
+            <button class="action-button" type="button" data-action="restart">重启</button>
+            <button class="action-button accent" type="button" data-action="subscription">更新订阅</button>
+          </div>
+        </section>
+
+        <section class="section-block compact" aria-labelledby="summaryTitle">
+          <div class="section-heading">
+            <div><p class="eyebrow">CURRENT PROFILE</p><h2 id="summaryTitle">当前配置</h2></div>
+            <button class="text-button" type="button" data-go="settings">快捷修改</button>
+          </div>
+          <dl class="summary-list">
+            <div><dt>配置文件</dt><dd id="configPathValue">—</dd></div>
+            <div><dt>订阅更新</dt><dd id="subscriptionStateValue">—</dd></div>
+            <div><dt>定时任务</dt><dd id="cronStateValue">—</dd></div>
+          </dl>
+        </section>
+        <button class="panel-button" id="openPanelButton" type="button">打开 Mihomo 面板</button>
+      </section>
+
+      <section class="page" data-page="settings" aria-labelledby="settingsTitle">
+        <div class="page-title"><p class="eyebrow">QUICK SETTINGS</p><h2 id="settingsTitle">快捷配置</h2><p>常用参数集中在这里，保存后可直接重启服务应用。</p></div>
+        <form id="settingsForm">
+          <section class="form-card">
+            <label for="coreSelect">运行核心</label>
+            <select id="coreSelect" name="bin_name">
+              <option value="clash">Clash / Mihomo</option><option value="sing-box">sing-box</option><option value="xray">Xray</option><option value="v2fly">V2Fly</option><option value="hysteria">Hysteria</option>
+            </select>
+            <label for="networkModeSelect">网络模式</label>
+            <select id="networkModeSelect" name="network_mode">
+              <option value="tproxy">TProxy</option><option value="redirect">Redirect</option><option value="mixed">Mixed</option><option value="enhance">Enhance</option><option value="tun">TUN</option>
+            </select>
+          </section>
+          <section class="form-card switch-list">
+            <label class="switch-row"><span><strong>IPv6</strong><small>允许代理处理 IPv6 流量</small></span><input type="checkbox" name="ipv6"><i aria-hidden="true"></i></label>
+            <label class="switch-row"><span><strong>启用订阅更新</strong><small>允许手动或定时下载订阅</small></span><input type="checkbox" name="update_subscription"><i aria-hidden="true"></i></label>
+            <label class="switch-row"><span><strong>整份替换配置</strong><small>开启后使用订阅完整替换 Mihomo 配置</small></span><input type="checkbox" name="renew"><i aria-hidden="true"></i></label>
+            <label class="switch-row"><span><strong>定时任务</strong><small>按 settings.ini 中的 Cron 表达式运行</small></span><input type="checkbox" name="run_crontab"><i aria-hidden="true"></i></label>
+            <label class="switch-row"><span><strong>订阅规则</strong><small>同时读取订阅内的 rules 字段</small></span><input type="checkbox" name="custom_rules_subs"><i aria-hidden="true"></i></label>
+          </section>
+          <section class="form-card">
+            <label for="subscriptionUrls">Mihomo 订阅地址</label>
+            <textarea id="subscriptionUrls" rows="6" placeholder="每行一个 http:// 或 https:// 地址" autocomplete="off" spellcheck="false"></textarea>
+            <p class="field-help">地址仅保存在设备的 <code>settings.ini</code>，页面不会向外发送。</p>
+          </section>
+          <div class="sticky-actions">
+            <button class="action-button" id="saveSettingsButton" type="submit">保存设置</button>
+            <button class="action-button primary" id="saveRestartButton" type="button">保存并重启</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" data-page="config" aria-labelledby="configTitle">
+        <div class="page-title with-action"><div><p class="eyebrow">MIHOMO YAML</p><h2 id="configTitle">原始配置</h2></div><button class="text-button" id="reloadConfigButton" type="button">重新读取</button></div>
+        <p class="notice">这里显示设备当前实际使用的配置。为避免误改大文件，本页默认只读。</p>
+        <div class="code-toolbar"><span id="configMeta">尚未读取</span><button class="text-button" id="copyConfigButton" type="button">复制全部</button></div>
+        <pre class="code-view" id="configContent" tabindex="0">点击“重新读取”查看原始 Mihomo 配置。</pre>
+      </section>
+
+      <section class="page" data-page="logs" aria-labelledby="logsTitle">
+        <div class="page-title with-action"><div><p class="eyebrow">RUNTIME LOG</p><h2 id="logsTitle">运行日志</h2></div><button class="text-button" id="reloadLogsButton" type="button">刷新</button></div>
+        <pre class="code-view logs" id="logsContent" tabindex="0">正在读取日志…</pre>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <button class="active" type="button" data-nav="overview"><span>概览</span></button><button type="button" data-nav="settings"><span>配置</span></button><button type="button" data-nav="config"><span>原始文件</span></button><button type="button" data-nav="logs"><span>日志</span></button>
+    </nav>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="operation-sheet" id="operationSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close-sheet></div>
+    <section class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="operationTitle">
+      <div class="sheet-handle" aria-hidden="true"></div><h2 id="operationTitle">正在执行</h2><pre id="operationOutput">请稍候…</pre><button class="action-button" type="button" data-close-sheet>关闭</button>
+    </section>
+  </div>
+  <script src="./app.js"></script>
+</body>
 </html>

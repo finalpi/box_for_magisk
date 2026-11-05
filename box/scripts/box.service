@@ -840,9 +840,8 @@ if ! command -v busybox &> /dev/null; then
   exit 1
 fi
 
-if command -v ksud &>/dev/null; then
- $scripts_dir/box.tool webroot >/dev/null 2>&1
-fi
+# The module WebUI now owns service controls and links to the Mihomo panel.
+# Do not replace it with a redirect page when the service starts.
 
 case "$1" in
   start)

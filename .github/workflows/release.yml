@@ -1,108 +1,72 @@
 name: release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release Tag'
+        description: "Release tag (for example: v1.11.0)"
         required: true
-      branch:
-        description: 'Push Changes Branch'
-        required: true
-      changelog:
-        description: 'Changelog Content'
-        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Checkout repository
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # 2. Generate version date
-      - name: Get Version
-        id: get_version
-        run: echo "date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
-
-      # 3. Update update.json, module.prop, and CHANGELOG.md
-      - name: Update files
+      - name: Resolve release version
+        id: version
+        shell: bash
         run: |
-          VERSION="${{ github.event.inputs.tag }}"
-          DATE_NUM="${{ steps.get_version.outputs.date }}"
-          DATE_HUMAN=$(date +%d-%m-%y)
-          CHANGELOG="${{ github.event.inputs.changelog }}"
-
-          # update.json
-          cat > update.json <<EOF
-          {
-            "version": "$VERSION",
-            "versionCode": "$DATE_NUM",
-            "zipUrl": "https://github.com/taamarin/box_for_magisk/releases/download/$VERSION/box_for_root-$VERSION.zip",
-            "changelog": "https://github.com/taamarin/box_for_magisk/raw/master/CHANGELOG.md"
-          }
-          EOF
-
-          # module.prop
-          sed -i "s/^version=.*/version=$VERSION/" module.prop
-          sed -i "s/^versionCode=.*/versionCode=$DATE_NUM/" module.prop
-
-          # Changelog
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-            echo "" >> CHANGELOG.md
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.tag }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
           fi
-          {
-            echo "#### Changelog $VERSION - $DATE_HUMAN"
-            echo "$CHANGELOG" | sed 's/^/- /'
-            echo ""
-            cat CHANGELOG.md
-          } > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid release tag: ${VERSION}" >&2
+            exit 1
+          }
+          MODULE_VERSION="$(sed -n 's/^version=//p' module.prop)"
+          [[ "${MODULE_VERSION}" == "${VERSION}" ]] || {
+            echo "module.prop version (${MODULE_VERSION}) does not match release tag (${VERSION})" >&2
+            exit 1
+          }
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-      # 4. Commit and push changes
-      - name: Commit and push changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add update.json module.prop CHANGELOG.md
-          git commit -m "${{ github.event.inputs.tag }}" || echo "No changes to commit"
-          git push origin "${{ github.event.inputs.branch }}" --force
-
-      # 5. Run build script
-      - name: Run build.sh
+      - name: Build flashable module
+        shell: bash
         run: |
           chmod +x build.sh
           ./build.sh
+          ASSET="box_for_root-${{ steps.version.outputs.version }}.zip"
+          test -f "${ASSET}"
+          unzip -t "${ASSET}"
+          sha256sum "${ASSET}" > "${ASSET}.sha256"
 
-      # 6. Create GitHub Release
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event.inputs.tag }}
-          files: box_for_root-v*.zip
+          name: box_for_root-${{ steps.version.outputs.version }}
+          path: |
+            box_for_root-${{ steps.version.outputs.version }}.zip
+            box_for_root-${{ steps.version.outputs.version }}.zip.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Box for Root ${{ steps.version.outputs.version }}
           generate_release_notes: true
-          body: |
-            #### Changelog v${{ github.event.inputs.tag }}
-            ${{ github.event.inputs.changelog }}
-
-      # 7. Upload to Telegram
-      - name: Upload to Telegram
-        if: ${{ success() }}
-        env:
-          CHAT_ID: "-1001597117128"
-          MESSAGE_THREAD_ID: "282263"
-          API_ID: ${{ secrets.API_ID }}
-          API_HASH: ${{ secrets.API_HASH }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: |
-          pip3 install --quiet telethon==1.31.1
-
-          FILE=$(find . -maxdepth 1 -type f -name "box_for_root-v*.zip" | head -n 1)
-          [ -z "$FILE" ] && echo "No ZIP file found!" && exit 1
-
-          export VERSION=$(git rev-parse --short HEAD)
-          export COMMIT=$(git log --oneline -n 10 --no-decorate | sed 's/^[0-9a-f]* //' | sed 's/^/— /')
-          python3 .github/taamarinbot.py "$FILE"
+          body_path: CHANGELOG.md
+          files: |
+            box_for_root-${{ steps.version.outputs.version }}.zip
+            box_for_root-${{ steps.version.outputs.version }}.zip.sha256
